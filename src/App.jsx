@@ -1,140 +1,145 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 
-// ── Mock Data ──────────────────────────────────────────────────────────────
-const MOCK_SERVICES = [
-  { serviceId: 1, serviceName: "Hair & Styling", description: "Professional cuts, coloring and styling.", duration: 60, price: 45.00 },
-  { serviceId: 2, serviceName: "Massage Therapy", description: "Deep-tissue and relaxation massages.", duration: 90, price: 80.00 },
-  { serviceId: 3, serviceName: "Dental Checkup", description: "Full oral exam + cleaning.", duration: 45, price: 120.00 },
-  { serviceId: 4, serviceName: "Personal Training", description: "One-on-one fitness coaching session.", duration: 60, price: 60.00 },
-  { serviceId: 5, serviceName: "Legal Consultation", description: "30-min legal advice session.", duration: 30, price: 150.00 },
-];
+// ─────────────────────────────────────────────────────────────
+//  API CONFIG — backend URL
+// ─────────────────────────────────────────────────────────────
+const API = "http://localhost:3001/api";
 
-function generateSlots(serviceId, date) {
-  const times = ["09:00","10:00","11:00","12:00","14:00","15:00","16:00","17:00"];
-  return times.map((t, i) => {
-    const h = parseInt(t) + 1;
-    const end = `${String(h).padStart(2,"0")}:00`;
-    const rand = Math.random();
-    return {
-      slotId: serviceId * 100 + i,
-      serviceId,
-      date,
-      startTime: t,
-      endTime: end,
-      status: rand < 0.35 ? "booked" : "available",
-    };
+// ─────────────────────────────────────────────────────────────
+//  API HELPER — Fetch Wrapper with JWT
+// ─────────────────────────────────────────────────────────────
+async function apiFetch(endpoint, options = {}) {
+  const token = localStorage.getItem("token");
+  const res = await fetch(`${API}${endpoint}`, {
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...options.headers,
+    },
   });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.message || "Request failed");
+  return data;
 }
 
-const ADMIN_USER = { email: "admin@bookeasy.com", password: "admin123", role: "admin", name: "Admin" };
-
-// ── Helpers ────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────
+//  HELPERS
+// ─────────────────────────────────────────────────────────────
 function today() { return new Date().toISOString().split("T")[0]; }
-function fmt(d) { return new Date(d).toLocaleDateString("tr-TR", { day:"2-digit", month:"short", year:"numeric" }); }
+function fmt(d) {
+  if (!d) return "-";
+  return new Date(d).toLocaleDateString("tr-TR", { day: "2-digit", month: "short", year: "numeric" });
+}
 
-// ── Styles ─────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────
+//  STYLES
+// ─────────────────────────────────────────────────────────────
 const css = `
-  @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,600;1,400&family=Jost:wght@300;400;500;600&display=swap');
 
   :root {
-    --ink: #4a3f4a;
-    --cream: #fdf6f8;
-    --warm: #fce8ef;
-    --accent: #e8a0b4;
-    --accent2: #8ec4d8;
-    --soft: #f0d6e0;
-    --muted: #b899a8;
-    --success: #7ab5a0;
-    --danger: #d4737a;
-    --card-bg: #ffffff;
-    --r: 12px;
+    --pink:    #e8a4b8;
+    --pink-d:  #d4879e;
+    --pink-l:  #fce8ef;
+    --blue:    #8ec4d8;
+    --blue-d:  #6aadc5;
+    --blue-l:  #e4f3f9;
+    --bg:      #fdf6f8;
+    --card:    #ffffff;
+    --ink:     #3d2b35;
+    --muted:   #b899a8;
+    --soft:    #f0d6e0;
+    --success: #6aad8e;
+    --danger:  #d47878;
+    --r:       14px;
   }
 
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
   body {
-    font-family: 'DM Sans', sans-serif;
-    background: var(--cream);
+    font-family: 'Jost', sans-serif;
+    background: var(--bg);
     color: var(--ink);
     min-height: 100vh;
   }
 
   /* NAV */
   .nav {
-    background: linear-gradient(135deg, #d4879e, #8ec4d8);
+    background: linear-gradient(135deg, var(--pink-d) 0%, var(--blue-d) 100%);
     padding: 0 32px;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    height: 60px;
+    height: 62px;
     position: sticky;
     top: 0;
     z-index: 100;
+    box-shadow: 0 2px 20px rgba(200,130,160,0.25);
   }
   .nav-brand {
-    font-family: 'DM Serif Display', serif;
-    font-size: 22px;
-    color: #fff;
-    letter-spacing: -0.5px;
+    font-family: 'Playfair Display', serif;
+    font-size: 24px;
+    color: white;
+    letter-spacing: 0.5px;
   }
-  .nav-brand span { color: var(--accent); }
-  .nav-links { display: flex; gap: 8px; align-items: center; }
+  .nav-brand span { font-style: italic; opacity: 0.85; }
+  .nav-links { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
   .nav-btn {
-    background: none;
-    border: none;
-    color: rgba(255,255,255,0.85);
-    font-family: 'DM Sans', sans-serif;
+    background: rgba(255,255,255,0.15);
+    border: 1px solid rgba(255,255,255,0.2);
+    color: white;
+    font-family: 'Jost', sans-serif;
     font-size: 14px;
-    cursor: pointer;
-    padding: 6px 14px;
-    border-radius: 6px;
-    transition: all 0.15s;
     font-weight: 500;
+    cursor: pointer;
+    padding: 7px 16px;
+    border-radius: 20px;
+    transition: all 0.2s;
   }
-  .nav-btn:hover { color: #fff; background: rgba(255,255,255,0.15); }
-  .nav-btn.active { color: #fff; background: rgba(255,255,255,0.2); }
+  .nav-btn:hover { background: rgba(255,255,255,0.28); }
+  .nav-btn.active { background: white; color: var(--pink-d); }
   .nav-badge {
     background: white;
-    color: #c97b9a;
+    color: var(--pink-d);
     border-radius: 20px;
-    padding: 5px 14px;
-    font-size: 13px;
-    font-weight: 700;
+    padding: 7px 18px;
+    font-size: 14px;
+    font-weight: 600;
     cursor: pointer;
     border: none;
-    font-family: 'DM Sans', sans-serif;
-    transition: opacity 0.15s;
+    font-family: 'Jost', sans-serif;
+    transition: all 0.2s;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
   }
-  .nav-badge:hover { opacity: 0.85; }
+  .nav-badge:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
 
   /* LAYOUT */
   .page { max-width: 1100px; margin: 0 auto; padding: 40px 24px; }
   .page-title {
-    font-family: 'DM Serif Display', serif;
-    font-size: 38px;
-    color: #c97b9a;
-    margin-bottom: 8px;
-    line-height: 1.1;
+    font-family: 'Playfair Display', serif;
+    font-size: 40px;
+    color: var(--ink);
+    margin-bottom: 6px;
   }
   .page-sub { color: var(--muted); font-size: 15px; margin-bottom: 32px; }
 
   /* CARDS */
   .card {
-    background: var(--card-bg);
+    background: var(--card);
     border-radius: var(--r);
     border: 1px solid var(--soft);
     padding: 28px;
     transition: box-shadow 0.2s;
   }
-  .card:hover { box-shadow: 0 4px 24px rgba(0,0,0,0.07); }
 
   .grid-2 { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 20px; }
-  .grid-3 { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; }
+  .grid-3 { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 16px; }
 
   /* SERVICE CARD */
   .svc-card {
-    background: var(--card-bg);
-    border: 1px solid var(--soft);
+    background: var(--card);
+    border: 1.5px solid var(--soft);
     border-radius: var(--r);
     padding: 24px;
     cursor: pointer;
@@ -142,63 +147,61 @@ const css = `
     position: relative;
     overflow: hidden;
   }
-  .svc-card::before {
+  .svc-card::after {
     content: '';
     position: absolute;
-    top: 0; left: 0; right: 0;
+    bottom: 0; left: 0; right: 0;
     height: 3px;
-    background: var(--accent);
+    background: linear-gradient(90deg, var(--pink), var(--blue));
     transform: scaleX(0);
-    transition: transform 0.2s;
+    transition: transform 0.25s;
   }
-  .svc-card:hover { box-shadow: 0 6px 28px rgba(0,0,0,0.09); transform: translateY(-2px); }
-  .svc-card:hover::before { transform: scaleX(1); }
-  .svc-card.selected { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
-  .svc-card.selected::before { transform: scaleX(1); }
+  .svc-card:hover { box-shadow: 0 8px 30px rgba(200,130,160,0.15); transform: translateY(-2px); }
+  .svc-card:hover::after, .svc-card.selected::after { transform: scaleX(1); }
+  .svc-card.selected { border-color: var(--pink); box-shadow: 0 0 0 2px var(--pink-l); }
   .svc-name { font-size: 17px; font-weight: 600; margin-bottom: 6px; }
   .svc-desc { font-size: 13px; color: var(--muted); line-height: 1.5; margin-bottom: 16px; }
   .svc-meta { display: flex; gap: 12px; align-items: center; }
-  .svc-price { font-size: 20px; font-weight: 700; color: var(--accent); }
-  .svc-dur { font-size: 12px; color: var(--muted); background: var(--warm); padding: 3px 10px; border-radius: 20px; }
+  .svc-price { font-size: 20px; font-weight: 700; color: var(--pink-d); }
+  .svc-dur { font-size: 12px; color: var(--muted); background: var(--pink-l); padding: 3px 10px; border-radius: 20px; }
 
   /* SLOT */
   .slot-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px; }
   .slot-btn {
     padding: 12px 8px;
-    border-radius: 8px;
+    border-radius: 10px;
     border: 1.5px solid var(--soft);
     background: white;
     cursor: pointer;
     text-align: center;
-    font-family: 'DM Sans', sans-serif;
+    font-family: 'Jost', sans-serif;
     font-size: 13px;
     font-weight: 500;
     transition: all 0.15s;
     color: var(--ink);
   }
-  .slot-btn:hover:not(.booked) { border-color: var(--accent); color: var(--accent); }
-  .slot-btn.selected { border-color: var(--accent); background: var(--accent); color: white; }
-  .slot-btn.booked { background: var(--warm); color: var(--muted); cursor: not-allowed; text-decoration: line-through; }
+  .slot-btn:hover:not(.booked) { border-color: var(--blue); color: var(--blue-d); }
+  .slot-btn.selected { border-color: var(--blue-d); background: var(--blue-d); color: white; }
+  .slot-btn.booked { background: var(--pink-l); color: var(--muted); cursor: not-allowed; text-decoration: line-through; }
   .slot-time { font-size: 15px; font-weight: 600; }
-  .slot-label { font-size: 11px; margin-top: 2px; }
+  .slot-label { font-size: 11px; margin-top: 2px; opacity: 0.7; }
 
   /* FORM */
   .form-group { margin-bottom: 20px; }
-  label { font-size: 13px; font-weight: 500; color: var(--muted); display: block; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px; }
+  label { font-size: 12px; font-weight: 600; color: var(--muted); display: block; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.8px; }
   input, select {
     width: 100%;
     padding: 11px 14px;
     border: 1.5px solid var(--soft);
-    border-radius: 8px;
-    font-family: 'DM Sans', sans-serif;
+    border-radius: 10px;
+    font-family: 'Jost', sans-serif;
     font-size: 15px;
     background: white;
     color: var(--ink);
     outline: none;
     transition: border-color 0.15s;
   }
-  input:focus, select:focus { border-color: var(--accent); }
-  input::placeholder { color: var(--muted); }
+  input:focus, select:focus { border-color: var(--blue); }
 
   /* BUTTONS */
   .btn {
@@ -206,225 +209,145 @@ const css = `
     align-items: center;
     gap: 6px;
     padding: 11px 22px;
-    border-radius: 8px;
-    font-family: 'DM Sans', sans-serif;
+    border-radius: 10px;
+    font-family: 'Jost', sans-serif;
     font-size: 14px;
     font-weight: 600;
     cursor: pointer;
     border: none;
     transition: all 0.15s;
   }
-  .btn-primary { background: #c97b9a; color: white; }
-  .btn-primary:hover { background: #b86a88; }
-  .btn-accent { background: #8ec4d8; color: white; }
-  .btn-accent:hover { background: #7ab3c8; }
+  .btn-primary { background: linear-gradient(135deg, var(--pink-d), var(--blue-d)); color: white; }
+  .btn-primary:hover { opacity: 0.9; transform: translateY(-1px); }
+  .btn-blue { background: var(--blue-d); color: white; }
+  .btn-blue:hover { background: var(--blue); }
   .btn-outline { background: white; color: var(--ink); border: 1.5px solid var(--soft); }
-  .btn-outline:hover { border-color: var(--ink); }
+  .btn-outline:hover { border-color: var(--pink); color: var(--pink-d); }
   .btn-danger { background: var(--danger); color: white; }
   .btn-danger:hover { opacity: 0.85; }
   .btn-sm { padding: 7px 14px; font-size: 13px; }
   .btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
-  /* ALERT */
-  .alert {
-    padding: 12px 16px;
-    border-radius: 8px;
-    font-size: 14px;
-    font-weight: 500;
-    margin-top: 16px;
-  }
+  /* ALERTS */
+  .alert { padding: 12px 16px; border-radius: 10px; font-size: 14px; font-weight: 500; margin-top: 16px; }
   .alert-success { background: #edf7f1; color: var(--success); border: 1px solid #b8dfc8; }
-  .alert-error { background: #fdf0f0; color: var(--danger); border: 1px solid #f0bfbf; }
-  .alert-info { background: #edf2fc; color: var(--accent2); border: 1px solid #bcd0f0; }
+  .alert-error   { background: #fdf0f0; color: var(--danger);  border: 1px solid #f0bfbf; }
+  .alert-info    { background: var(--blue-l); color: var(--blue-d); border: 1px solid #b8d8e8; }
 
-  /* BADGE */
-  .badge {
-    display: inline-block;
-    padding: 3px 10px;
-    border-radius: 20px;
-    font-size: 11px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.3px;
-  }
+  /* BADGES */
+  .badge { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px; }
   .badge-confirmed { background: #edf7f1; color: var(--success); }
   .badge-cancelled { background: #fdf0f0; color: var(--danger); }
-  .badge-available { background: #edf7f1; color: var(--success); }
-  .badge-booked { background: var(--warm); color: var(--muted); }
 
   /* TABLE */
   table { width: 100%; border-collapse: collapse; }
-  th { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; padding: 10px 14px; text-align: left; border-bottom: 2px solid var(--soft); }
-  td { padding: 14px; border-bottom: 1px solid var(--warm); font-size: 14px; vertical-align: middle; }
+  th { font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.8px; padding: 10px 14px; text-align: left; border-bottom: 2px solid var(--soft); }
+  td { padding: 14px; border-bottom: 1px solid var(--pink-l); font-size: 14px; vertical-align: middle; }
   tr:last-child td { border-bottom: none; }
-  tr:hover td { background: var(--cream); }
+  tr:hover td { background: var(--bg); }
 
   /* STEP INDICATOR */
   .steps { display: flex; gap: 0; margin-bottom: 32px; }
-  .step {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    position: relative;
-  }
-  .step::after {
-    content: '';
-    position: absolute;
-    top: 14px;
-    left: 50%;
-    width: 100%;
-    height: 2px;
-    background: var(--soft);
-    z-index: 0;
-  }
+  .step { flex: 1; display: flex; flex-direction: column; align-items: center; position: relative; }
+  .step::after { content: ''; position: absolute; top: 14px; left: 50%; width: 100%; height: 2px; background: var(--soft); z-index: 0; }
   .step:last-child::after { display: none; }
-  .step-dot {
-    width: 28px; height: 28px;
-    border-radius: 50%;
-    background: var(--soft);
-    display: flex; align-items: center; justify-content: center;
-    font-size: 12px;
-    font-weight: 700;
-    color: var(--muted);
-    position: relative;
-    z-index: 1;
-    transition: all 0.2s;
-  }
-  .step.done .step-dot { background: var(--ink); color: white; }
-  .step.active .step-dot { background: var(--accent); color: white; }
-  .step.done::after { background: var(--ink); }
+  .step-dot { width: 28px; height: 28px; border-radius: 50%; background: var(--soft); display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; color: var(--muted); position: relative; z-index: 1; transition: all 0.2s; }
+  .step.done .step-dot { background: var(--pink-d); color: white; }
+  .step.active .step-dot { background: var(--blue-d); color: white; }
+  .step.done::after { background: var(--pink-d); }
   .step-label { font-size: 11px; color: var(--muted); margin-top: 6px; font-weight: 500; text-align: center; }
-  .step.active .step-label { color: var(--accent); font-weight: 600; }
-  .step.done .step-label { color: var(--ink); }
+  .step.active .step-label { color: var(--blue-d); font-weight: 600; }
+  .step.done .step-label { color: var(--pink-d); }
 
   /* HERO */
   .hero {
-    background: linear-gradient(135deg, #d4879e 0%, #8ec4d8 100%);
-    border-radius: 16px;
+    background: linear-gradient(135deg, var(--pink-d) 0%, var(--blue-d) 100%);
+    border-radius: 20px;
     padding: 56px 48px;
     margin-bottom: 40px;
     position: relative;
     overflow: hidden;
   }
-  .hero::after {
-    content: 'BOOK';
+  .hero::before {
+    content: '';
     position: absolute;
-    right: -20px; bottom: -40px;
-    font-family: 'DM Serif Display', serif;
-    font-size: 180px;
-    color: rgba(255,255,255,0.03);
-    line-height: 1;
-    pointer-events: none;
+    top: -60px; right: -60px;
+    width: 300px; height: 300px;
+    background: rgba(255,255,255,0.08);
+    border-radius: 50%;
   }
-  .hero h1 {
-    font-family: 'DM Serif Display', serif;
-    font-size: 48px;
-    color: #fff;
-    line-height: 1.1;
-    margin-bottom: 12px;
-  }
-  .hero h1 em { color: #fff3f7; font-style: italic; }
-  .hero p { color: rgba(255,255,255,0.85); font-size: 16px; margin-bottom: 28px; max-width: 500px; }
-  .hero-btns { display: flex; gap: 12px; }
+  .hero h1 { font-family: 'Playfair Display', serif; font-size: 46px; color: white; line-height: 1.15; margin-bottom: 12px; }
+  .hero h1 em { font-style: italic; opacity: 0.9; }
+  .hero p { color: rgba(255,255,255,0.8); font-size: 16px; margin-bottom: 28px; max-width: 480px; }
+  .hero-btns { display: flex; gap: 12px; flex-wrap: wrap; }
 
-  /* STATS */
+  /* STAT */
   .stat-box { text-align: center; }
-  .stat-num { font-family: 'DM Serif Display', serif; font-size: 36px; color: var(--accent); }
+  .stat-num { font-family: 'Playfair Display', serif; font-size: 36px; color: var(--pink-d); }
   .stat-lbl { font-size: 13px; color: var(--muted); margin-top: 2px; }
 
   /* MODAL */
-  .modal-overlay {
-    position: fixed; inset: 0;
-    background: rgba(15,14,13,0.6);
-    backdrop-filter: blur(4px);
-    display: flex; align-items: center; justify-content: center;
-    z-index: 1000;
-    animation: fadeIn 0.15s ease;
-  }
-  .modal {
-    background: white;
-    border-radius: 16px;
-    padding: 36px;
-    width: 100%;
-    max-width: 440px;
-    animation: slideUp 0.2s ease;
-  }
-  .modal-title {
-    font-family: 'DM Serif Display', serif;
-    font-size: 26px;
-    margin-bottom: 6px;
-  }
+  .modal-overlay { position: fixed; inset: 0; background: rgba(60,40,50,0.5); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; z-index: 1000; }
+  .modal { background: white; border-radius: 20px; padding: 36px; width: 100%; max-width: 440px; }
+  .modal-title { font-family: 'Playfair Display', serif; font-size: 28px; margin-bottom: 6px; }
   .modal-sub { color: var(--muted); font-size: 14px; margin-bottom: 28px; }
   .modal-close { float: right; background: none; border: none; cursor: pointer; font-size: 20px; color: var(--muted); }
-
-  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-  @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
 
   .divider { display: flex; align-items: center; gap: 12px; margin: 20px 0; color: var(--muted); font-size: 13px; }
   .divider::before, .divider::after { content: ''; flex: 1; height: 1px; background: var(--soft); }
 
-  .tabs { display: flex; gap: 4px; background: var(--warm); padding: 4px; border-radius: 10px; margin-bottom: 24px; }
-  .tab {
-    flex: 1;
-    padding: 9px;
-    border: none;
-    border-radius: 7px;
-    background: none;
-    font-family: 'DM Sans', sans-serif;
-    font-size: 14px;
-    font-weight: 500;
-    color: var(--muted);
-    cursor: pointer;
-    transition: all 0.15s;
-  }
-  .tab.active { background: white; color: var(--ink); box-shadow: 0 1px 4px rgba(0,0,0,0.1); }
+  .tabs { display: flex; gap: 4px; background: var(--pink-l); padding: 4px; border-radius: 12px; margin-bottom: 24px; }
+  .tab { flex: 1; padding: 9px; border: none; border-radius: 9px; background: none; font-family: 'Jost', sans-serif; font-size: 14px; font-weight: 500; color: var(--muted); cursor: pointer; transition: all 0.15s; }
+  .tab.active { background: white; color: var(--ink); box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
 
-  .summary-box {
-    background: var(--warm);
-    border-radius: 10px;
-    padding: 20px;
-    margin-bottom: 20px;
-  }
+  .summary-box { background: var(--pink-l); border-radius: 12px; padding: 20px; margin-bottom: 20px; }
   .summary-row { display: flex; justify-content: space-between; padding: 6px 0; font-size: 14px; }
   .summary-row.total { font-weight: 700; font-size: 16px; border-top: 1px solid var(--soft); padding-top: 12px; margin-top: 6px; }
+
+  .loading { text-align: center; padding: 48px; color: var(--muted); font-size: 15px; }
+  .error-box { background: #fdf0f0; border: 1px solid #f0bfbf; border-radius: 10px; padding: 16px; color: var(--danger); font-size: 14px; margin-bottom: 16px; }
+
+  .toast { position: fixed; top: 72px; right: 24px; z-index: 200; min-width: 280px; animation: slideIn 0.2s ease; }
+  @keyframes slideIn { from { transform: translateX(20px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
 `;
 
-// ══════════════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════
 // MAIN APP
-// ══════════════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════
 export default function App() {
-  const [page, setPage] = useState("home");
-  const [user, setUser] = useState(null);
-  const [bookings, setBookings] = useState([]);
-  const [authModal, setAuthModal] = useState(null); // "login" | "register"
-  const [msg, setMsg] = useState(null);
+  const [page, setPage]         = useState("home");
+  const [user, setUser]         = useState(() => {
+    try { return JSON.parse(localStorage.getItem("user")); } catch { return null; }
+  });
+  const [authModal, setAuthModal] = useState(null);
+  const [toast, setToast]         = useState(null);
 
-  function showMsg(text, type = "success") {
-    setMsg({ text, type });
-    setTimeout(() => setMsg(null), 4000);
+  function showToast(text, type = "success") {
+    setToast({ text, type });
+    setTimeout(() => setToast(null), 4000);
   }
 
   function logout() {
+    localStorage.removeItem("token");
+    localStorage.removeItem("user");
     setUser(null);
     setPage("home");
-    showMsg("Logged out successfully.", "info");
+    showToast("Logged out successfully.", "info");
   }
 
-  function addBooking(b) {
-    setBookings(prev => [b, ...prev]);
+  function onAuth(userData, token) {
+    localStorage.setItem("token", token);
+    localStorage.setItem("user", JSON.stringify(userData));
+    setUser(userData);
+    setAuthModal(null);
+    showToast(`Welcome, ${userData.name}! 👋`);
+    setPage("services");
   }
-
-  function cancelBooking(id) {
-    setBookings(prev => prev.map(b => b.bookingId === id ? { ...b, status: "cancelled" } : b));
-    showMsg("Booking cancelled successfully.", "info");
-  }
-
-  const myBookings = bookings.filter(b => !user?.role === "admin" || b.userId === user?.email);
 
   return (
     <>
       <style>{css}</style>
+
       <nav className="nav">
         <div className="nav-brand">Book<span>Easy</span></div>
         <div className="nav-links">
@@ -444,9 +367,9 @@ export default function App() {
         </div>
       </nav>
 
-      {msg && (
-        <div style={{ position: "fixed", top: 72, right: 24, zIndex: 200, minWidth: 280 }}>
-          <div className={`alert alert-${msg.type}`}>{msg.text}</div>
+      {toast && (
+        <div className="toast">
+          <div className={`alert alert-${toast.type}`}>{toast.text}</div>
         </div>
       )}
 
@@ -454,86 +377,84 @@ export default function App() {
         <AuthModal
           mode={authModal}
           onClose={() => setAuthModal(null)}
-          onSwitch={(m) => setAuthModal(m)}
-          onAuth={(u) => { setUser(u); setAuthModal(null); showMsg(`Welcome back, ${u.name}!`); }}
+          onSwitch={m => setAuthModal(m)}
+          onAuth={onAuth}
         />
       )}
 
-      {page === "home" && <HomePage user={user} setPage={setPage} setAuthModal={setAuthModal} bookings={bookings} />}
-      {page === "services" && <ServicesPage setPage={setPage} user={user} setAuthModal={setAuthModal} />}
-      {page === "book" && user && <BookPage user={user} onBook={(b) => { addBooking(b); showMsg(`Booking confirmed! ID: #${b.bookingId}`); setPage("mybookings"); }} />}
-      {page === "mybookings" && user && <MyBookingsPage bookings={bookings.filter(b => b.userId === user.email)} onCancel={cancelBooking} />}
-      {page === "admin" && user?.role === "admin" && <AdminPage bookings={bookings} onCancel={cancelBooking} />}
+      {page === "home"       && <HomePage user={user} setPage={setPage} setAuthModal={setAuthModal} />}
+      {page === "services"   && <ServicesPage setPage={setPage} user={user} setAuthModal={setAuthModal} />}
+      {page === "book"       && user && <BookPage user={user} showToast={showToast} onDone={() => setPage("mybookings")} />}
+      {page === "mybookings" && user && <MyBookingsPage showToast={showToast} />}
+      {page === "admin"      && user?.role === "admin" && <AdminPage showToast={showToast} />}
     </>
   );
 }
 
-// ══════════════════════════════════════════════════════════════════
-// AUTH MODAL
-// ══════════════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════
+// AUTH MODAL — Real fetch() to /api/auth/register & /api/auth/login
+// ══════════════════════════════════════════════════════════════
 function AuthModal({ mode, onClose, onSwitch, onAuth }) {
-  const [form, setForm] = useState({ name: "", email: "", password: "" });
-  const [err, setErr] = useState("");
+  const [form, setForm]   = useState({ name: "", email: "", password: "" });
+  const [err, setErr]     = useState("");
+  const [loading, setLoading] = useState(false);
 
-  function submit(e) {
+  async function submit(e) {
     e.preventDefault();
     setErr("");
-    if (mode === "login") {
-      if (form.email === ADMIN_USER.email && form.password === ADMIN_USER.password) {
-        onAuth(ADMIN_USER);
-      } else if (form.email && form.password.length >= 4) {
-        onAuth({ email: form.email, name: form.email.split("@")[0], role: "user" });
-      } else {
-        setErr("Invalid credentials. Try any email with 4+ char password.");
-      }
-    } else {
-      if (!form.name || !form.email || form.password.length < 4) {
-        setErr("Please fill all fields. Password must be 4+ chars.");
-        return;
-      }
-      onAuth({ email: form.email, name: form.name, role: "user" });
+    setLoading(true);
+    try {
+      const endpoint = mode === "login" ? "/auth/login" : "/auth/register";
+      const body     = mode === "login"
+        ? { email: form.email, password: form.password }
+        : { name: form.name, email: form.email, password: form.password };
+
+      // Real fetch() call to backend
+      const data = await apiFetch(endpoint, { method: "POST", body: JSON.stringify(body) });
+      onAuth(data.user, data.token);
+    } catch (err) {
+      setErr(err.message);
+    } finally {
+      setLoading(false);
     }
   }
 
   return (
-    <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
+    <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="modal">
         <button className="modal-close" onClick={onClose}>✕</button>
         <div className="modal-title">{mode === "login" ? "Welcome back" : "Create account"}</div>
-        <div className="modal-sub">
-          {mode === "login" ? "Sign in to manage your bookings." : "Join BookEasy — it's free."}
-        </div>
+        <div className="modal-sub">{mode === "login" ? "Sign in to your account." : "Join BookEasy — it's free."}</div>
 
         <form onSubmit={submit}>
           {mode === "register" && (
             <div className="form-group">
               <label>Full Name</label>
-              <input placeholder="Jane Smith" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
+              <input placeholder="Jane Smith" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} required />
             </div>
           )}
           <div className="form-group">
             <label>Email</label>
-            <input type="email" placeholder="you@example.com" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} />
+            <input type="email" placeholder="you@example.com" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} required />
           </div>
           <div className="form-group">
             <label>Password</label>
-            <input type="password" placeholder="••••••••" value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} />
+            <input type="password" placeholder="••••••••" value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} required />
           </div>
-          {err && <div className="alert alert-error">{err}</div>}
-          <button className="btn btn-primary" style={{ width: "100%", justifyContent: "center", marginTop: 8 }}>
-            {mode === "login" ? "Sign In" : "Create Account"}
+          {err && <div className="error-box">{err}</div>}
+          <button className="btn btn-primary" style={{ width: "100%", justifyContent: "center", marginTop: 8 }} disabled={loading}>
+            {loading ? "Please wait..." : mode === "login" ? "Sign In" : "Create Account"}
           </button>
         </form>
 
         <div className="divider">{mode === "login" ? "No account?" : "Already have one?"}</div>
-        <button className="btn btn-outline" style={{ width: "100%", justifyContent: "center" }}
-          onClick={() => onSwitch(mode === "login" ? "register" : "login")}>
-          {mode === "login" ? "Create Account" : "Sign In"}
+        <button className="btn btn-outline" style={{ width: "100%", justifyContent: "center" }} onClick={() => onSwitch(mode === "login" ? "register" : "login")}>
+          {mode === "login" ? "Register" : "Sign In"}
         </button>
 
         {mode === "login" && (
           <div className="alert alert-info" style={{ marginTop: 16, fontSize: 12 }}>
-            <strong>Admin demo:</strong> admin@bookeasy.com / admin123
+            <strong>Admin:</strong> admin@bookeasy.com / admin123
           </div>
         )}
       </div>
@@ -541,59 +462,56 @@ function AuthModal({ mode, onClose, onSwitch, onAuth }) {
   );
 }
 
-// ══════════════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════
 // HOME PAGE
-// ══════════════════════════════════════════════════════════════════
-function HomePage({ user, setPage, setAuthModal, bookings }) {
+// ══════════════════════════════════════════════════════════════
+function HomePage({ user, setPage, setAuthModal }) {
+  const [services, setServices] = useState([]);
+
+  useEffect(() => {
+    fetch(`${API}/services`).then(r => r.json()).then(setServices).catch(() => {});
+  }, []);
+
   return (
     <div className="page">
       <div className="hero">
-        <h1>Book your <em>next appointment</em> in seconds.</h1>
-        <p>Choose from {MOCK_SERVICES.length} premium services. Instant confirmation. No waiting on hold.</p>
+        <h1>Book your <em>next appointment</em><br/>in seconds.</h1>
+        <p>Choose from {services.length || 5}+ premium services. Instant confirmation. No phone calls.</p>
         <div className="hero-btns">
           {user ? (
-            <button className="btn btn-accent" onClick={() => setPage("book")}>Book Now →</button>
+            <button className="nav-badge" onClick={() => setPage("book")}>Book Now →</button>
           ) : (
             <>
-              <button className="btn btn-accent" onClick={() => setAuthModal("register")}>Get Started</button>
-              <button className="btn" style={{ background: "rgba(255,255,255,0.1)", color: "var(--cream)" }} onClick={() => setAuthModal("login")}>Sign In</button>
+              <button className="nav-badge" onClick={() => setAuthModal("register")}>Get Started</button>
+              <button className="btn" style={{ background: "rgba(255,255,255,0.15)", color: "white", border: "1px solid rgba(255,255,255,0.3)" }} onClick={() => setAuthModal("login")}>Sign In</button>
             </>
           )}
-          <button className="btn" style={{ background: "rgba(255,255,255,0.1)", color: "var(--cream)" }} onClick={() => setPage("services")}>View Services</button>
         </div>
       </div>
 
       <div className="grid-3" style={{ marginBottom: 40 }}>
-        <div className="card stat-box">
-          <div className="stat-num">{MOCK_SERVICES.length}</div>
-          <div className="stat-lbl">Services Available</div>
-        </div>
-        <div className="card stat-box">
-          <div className="stat-num">{bookings.filter(b => b.status === "confirmed").length}</div>
-          <div className="stat-lbl">Active Bookings</div>
-        </div>
-        <div className="card stat-box">
-          <div className="stat-num">24/7</div>
-          <div className="stat-lbl">Online Booking</div>
-        </div>
-        <div className="card stat-box">
-          <div className="stat-num">0s</div>
-          <div className="stat-lbl">Wait Time</div>
-        </div>
-        <div className="card stat-box">
-          <div className="stat-num">100%</div>
-          <div className="stat-lbl">Confirmation Rate</div>
-        </div>
+        {[
+          { num: services.length || "5", lbl: "Services Available" },
+          { num: "24/7", lbl: "Online Booking" },
+          { num: "100%", lbl: "Instant Confirm" },
+          { num: "0s",   lbl: "Wait Time" },
+          { num: "JWT",  lbl: "Secure Auth" },
+        ].map(s => (
+          <div className="card stat-box" key={s.lbl}>
+            <div className="stat-num">{s.num}</div>
+            <div className="stat-lbl">{s.lbl}</div>
+          </div>
+        ))}
       </div>
 
-      <div className="page-title" style={{ fontSize: 26, marginBottom: 20 }}>Our Services</div>
+      <div className="page-title" style={{ fontSize: 28, marginBottom: 20 }}>Our Services</div>
       <div className="grid-2">
-        {MOCK_SERVICES.map(s => (
+        {services.map(s => (
           <div className="svc-card" key={s.serviceId} onClick={() => user ? setPage("book") : setAuthModal("login")}>
             <div className="svc-name">{s.serviceName}</div>
             <div className="svc-desc">{s.description}</div>
             <div className="svc-meta">
-              <div className="svc-price">${s.price.toFixed(2)}</div>
+              <div className="svc-price">${s.price?.toFixed(2)}</div>
               <div className="svc-dur">{s.duration} min</div>
             </div>
           </div>
@@ -603,68 +521,103 @@ function HomePage({ user, setPage, setAuthModal, bookings }) {
   );
 }
 
-// ══════════════════════════════════════════════════════════════════
-// SERVICES PAGE
-// ══════════════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════
+// SERVICES PAGE — Real fetch() to /api/services
+// ══════════════════════════════════════════════════════════════
 function ServicesPage({ setPage, user, setAuthModal }) {
+  const [services, setServices] = useState([]);
+  const [loading, setLoading]   = useState(true);
+
+  useEffect(() => {
+    fetch(`${API}/services`)
+      .then(r => r.json())
+      .then(data => { setServices(data); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, []);
+
   return (
     <div className="page">
       <div className="page-title">All Services</div>
       <div className="page-sub">Browse and select a service to book your appointment.</div>
-      <div className="grid-2">
-        {MOCK_SERVICES.map(s => (
-          <div className="card" key={s.serviceId} style={{ cursor: "pointer" }} onClick={() => user ? setPage("book") : setAuthModal("login")}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
-              <div className="svc-name" style={{ fontSize: 18 }}>{s.serviceName}</div>
-              <div className="svc-price">${s.price.toFixed(2)}</div>
+      {loading ? <div className="loading">Loading services...</div> : (
+        <div className="grid-2">
+          {services.map(s => (
+            <div className="card" key={s.serviceId} style={{ cursor: "pointer" }} onClick={() => user ? setPage("book") : setAuthModal("login")}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
+                <div className="svc-name" style={{ fontSize: 18 }}>{s.serviceName}</div>
+                <div className="svc-price">${s.price?.toFixed(2)}</div>
+              </div>
+              <div className="svc-desc" style={{ marginBottom: 16 }}>{s.description}</div>
+              <div className="svc-dur" style={{ display: "inline-block" }}>{s.duration} min</div>
             </div>
-            <div className="svc-desc" style={{ marginBottom: 16 }}>{s.description}</div>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <span className="badge badge-available">Available</span>
-              <span className="svc-dur">{s.duration} min</span>
-            </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
 
-// ══════════════════════════════════════════════════════════════════
-// BOOK PAGE
-// ══════════════════════════════════════════════════════════════════
-function BookPage({ user, onBook }) {
-  const [step, setStep] = useState(1);
-  const [selectedService, setSelectedService] = useState(null);
-  const [selectedDate, setSelectedDate] = useState(today());
-  const [slots, setSlots] = useState([]);
+// ══════════════════════════════════════════════════════════════
+// BOOK PAGE — Real fetch() to /api/services, /api/slots, /api/bookings
+// ══════════════════════════════════════════════════════════════
+function BookPage({ user, showToast, onDone }) {
+  const [step, setStep]             = useState(1);
+  const [services, setServices]     = useState([]);
+  const [selectedSvc, setSelectedSvc] = useState(null);
+  const [date, setDate]             = useState(today());
+  const [slots, setSlots]           = useState([]);
   const [selectedSlot, setSelectedSlot] = useState(null);
-  const [slotsLoaded, setSlotsLoaded] = useState(false);
+  const [slotsLoaded, setSlotsLoaded]   = useState(false);
+  const [loading, setLoading]       = useState(false);
+  const [err, setErr]               = useState("");
 
-  function checkSlots() {
-    if (!selectedService || !selectedDate) return;
-    const generated = generateSlots(selectedService.serviceId, selectedDate);
-    setSlots(generated);
-    setSelectedSlot(null);
-    setSlotsLoaded(true);
-    setStep(3);
+  // Fetch services from real API
+  useEffect(() => {
+    fetch(`${API}/services`)
+      .then(r => r.json())
+      .then(setServices)
+      .catch(() => {});
+  }, []);
+
+  // Fetch available slots — real API call with JWT
+  async function checkSlots() {
+    if (!selectedSvc || !date) return;
+    setLoading(true);
+    setErr("");
+    try {
+      // GET /api/slots?serviceId=X&date=Y  (with Authorization header)
+      const data = await apiFetch(`/slots?serviceId=${selectedSvc.serviceId}&date=${date}`);
+      setSlots(data);
+      setSlotsLoaded(true);
+      setSelectedSlot(null);
+      setStep(3);
+    } catch (e) {
+      setErr(e.message);
+    } finally {
+      setLoading(false);
+    }
   }
 
-  function confirm() {
+  // Confirm booking — real POST /api/bookings with JWT
+  async function confirmBooking() {
     if (!selectedSlot) return;
-    const booking = {
-      bookingId: Date.now(),
-      userId: user.email,
-      service: selectedService,
-      slot: selectedSlot,
-      status: "confirmed",
-      bookingDate: new Date().toISOString(),
-      serviceId: selectedService.serviceId,
-    };
-    onBook(booking);
+    setLoading(true);
+    setErr("");
+    try {
+      const data = await apiFetch("/bookings", {
+        method: "POST",
+        body: JSON.stringify({ serviceId: selectedSvc.serviceId, slotId: selectedSlot.slotId }),
+      });
+      showToast(`✅ Booking confirmed! ID: #${data.bookingId}`);
+      onDone();
+    } catch (e) {
+      setErr(e.message);
+    } finally {
+      setLoading(false);
+    }
   }
 
-  const steps = ["Select Service", "Choose Date", "Pick Slot", "Confirm"];
+  const stepLabels = ["Select Service", "Choose Date", "Pick Slot", "Confirm"];
 
   return (
     <div className="page">
@@ -672,7 +625,7 @@ function BookPage({ user, onBook }) {
       <div className="page-sub">Follow the steps below to book your appointment.</div>
 
       <div className="steps">
-        {steps.map((s, i) => (
+        {stepLabels.map((s, i) => (
           <div key={i} className={`step ${step > i + 1 ? "done" : step === i + 1 ? "active" : ""}`}>
             <div className="step-dot">{step > i + 1 ? "✓" : i + 1}</div>
             <div className="step-label">{s}</div>
@@ -680,40 +633,42 @@ function BookPage({ user, onBook }) {
         ))}
       </div>
 
+      {err && <div className="error-box">{err}</div>}
+
       {/* Step 1 — Service */}
       <div className="card" style={{ marginBottom: 20 }}>
         <div style={{ fontWeight: 600, marginBottom: 16, fontSize: 15 }}>1. Select a Service</div>
-        <div className="grid-2">
-          {MOCK_SERVICES.map(s => (
-            <div
-              key={s.serviceId}
-              className={`svc-card ${selectedService?.serviceId === s.serviceId ? "selected" : ""}`}
-              onClick={() => { setSelectedService(s); setStep(Math.max(step, 2)); setSlotsLoaded(false); }}
-            >
-              <div className="svc-name">{s.serviceName}</div>
-              <div className="svc-desc">{s.description}</div>
-              <div className="svc-meta">
-                <div className="svc-price">${s.price.toFixed(2)}</div>
-                <div className="svc-dur">{s.duration} min</div>
+        {services.length === 0 ? <div className="loading">Loading...</div> : (
+          <div className="grid-2">
+            {services.map(s => (
+              <div key={s.serviceId}
+                className={`svc-card ${selectedSvc?.serviceId === s.serviceId ? "selected" : ""}`}
+                onClick={() => { setSelectedSvc(s); setStep(Math.max(step, 2)); setSlotsLoaded(false); }}>
+                <div className="svc-name">{s.serviceName}</div>
+                <div className="svc-desc">{s.description}</div>
+                <div className="svc-meta">
+                  <div className="svc-price">${s.price?.toFixed(2)}</div>
+                  <div className="svc-dur">{s.duration} min</div>
+                </div>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Step 2 — Date */}
-      {selectedService && (
+      {selectedSvc && (
         <div className="card" style={{ marginBottom: 20 }}>
           <div style={{ fontWeight: 600, marginBottom: 16, fontSize: 15 }}>2. Choose a Date</div>
           <div style={{ display: "flex", gap: 16, alignItems: "flex-end" }}>
             <div style={{ flex: 1 }}>
               <div className="form-group" style={{ marginBottom: 0 }}>
                 <label>Select Date</label>
-                <input type="date" value={selectedDate} min={today()} onChange={e => { setSelectedDate(e.target.value); setSlotsLoaded(false); setStep(2); }} />
+                <input type="date" value={date} min={today()} onChange={e => { setDate(e.target.value); setSlotsLoaded(false); setStep(2); }} />
               </div>
             </div>
-            <button className="btn btn-accent" onClick={checkSlots} disabled={!selectedDate}>
-              Check Availability →
+            <button className="btn btn-blue" onClick={checkSlots} disabled={!date || loading}>
+              {loading ? "Loading..." : "Check Availability →"}
             </button>
           </div>
         </div>
@@ -724,20 +679,22 @@ function BookPage({ user, onBook }) {
         <div className="card" style={{ marginBottom: 20 }}>
           <div style={{ fontWeight: 600, marginBottom: 4, fontSize: 15 }}>3. Pick a Time Slot</div>
           <div style={{ color: "var(--muted)", fontSize: 13, marginBottom: 16 }}>
-            Showing slots for <strong>{selectedService.serviceName}</strong> on <strong>{fmt(selectedDate)}</strong>
+            {selectedSvc.serviceName} — {fmt(date)}
           </div>
-          <div className="slot-grid">
-            {slots.map(s => (
-              <button
-                key={s.slotId}
-                className={`slot-btn ${s.status === "booked" ? "booked" : ""} ${selectedSlot?.slotId === s.slotId ? "selected" : ""}`}
-                onClick={() => { if (s.status !== "booked") { setSelectedSlot(s); setStep(4); } }}
-              >
-                <div className="slot-time">{s.startTime}</div>
-                <div className="slot-label">{s.status === "booked" ? "Taken" : `– ${s.endTime}`}</div>
-              </button>
-            ))}
-          </div>
+          {slots.length === 0 ? (
+            <div style={{ color: "var(--muted)", fontSize: 14 }}>No slots available for this date.</div>
+          ) : (
+            <div className="slot-grid">
+              {slots.map(s => (
+                <button key={s.slotId}
+                  className={`slot-btn ${s.status === "booked" ? "booked" : ""} ${selectedSlot?.slotId === s.slotId ? "selected" : ""}`}
+                  onClick={() => { if (s.status !== "booked") { setSelectedSlot(s); setStep(4); } }}>
+                  <div className="slot-time">{s.startTime}</div>
+                  <div className="slot-label">{s.status === "booked" ? "Taken" : `– ${s.endTime}`}</div>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -746,14 +703,14 @@ function BookPage({ user, onBook }) {
         <div className="card">
           <div style={{ fontWeight: 600, marginBottom: 16, fontSize: 15 }}>4. Confirm Your Booking</div>
           <div className="summary-box">
-            <div className="summary-row"><span>Service</span><span style={{ fontWeight: 600 }}>{selectedService.serviceName}</span></div>
-            <div className="summary-row"><span>Date</span><span>{fmt(selectedDate)}</span></div>
+            <div className="summary-row"><span>Service</span><span style={{ fontWeight: 600 }}>{selectedSvc.serviceName}</span></div>
+            <div className="summary-row"><span>Date</span><span>{fmt(date)}</span></div>
             <div className="summary-row"><span>Time</span><span>{selectedSlot.startTime} – {selectedSlot.endTime}</span></div>
-            <div className="summary-row"><span>Duration</span><span>{selectedService.duration} min</span></div>
-            <div className="summary-row total"><span>Total</span><span style={{ color: "var(--accent)" }}>${selectedService.price.toFixed(2)}</span></div>
+            <div className="summary-row"><span>Duration</span><span>{selectedSvc.duration} min</span></div>
+            <div className="summary-row total"><span>Total</span><span style={{ color: "var(--pink-d)" }}>${selectedSvc.price?.toFixed(2)}</span></div>
           </div>
-          <button className="btn btn-accent" onClick={confirm}>
-            ✓ Confirm Booking
+          <button className="btn btn-primary" onClick={confirmBooking} disabled={loading}>
+            {loading ? "Confirming..." : "✓ Confirm Booking"}
           </button>
         </div>
       )}
@@ -761,11 +718,39 @@ function BookPage({ user, onBook }) {
   );
 }
 
-// ══════════════════════════════════════════════════════════════════
-// MY BOOKINGS
-// ══════════════════════════════════════════════════════════════════
-function MyBookingsPage({ bookings, onCancel }) {
-  const [filter, setFilter] = useState("all");
+// ══════════════════════════════════════════════════════════════
+// MY BOOKINGS — Real GET /api/bookings/mine + DELETE /api/bookings/:id
+// ══════════════════════════════════════════════════════════════
+function MyBookingsPage({ showToast }) {
+  const [bookings, setBookings] = useState([]);
+  const [loading, setLoading]   = useState(true);
+  const [filter, setFilter]     = useState("all");
+
+  const fetchBookings = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await apiFetch("/bookings/mine");
+      setBookings(data);
+    } catch (e) {
+      showToast(e.message, "error");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { fetchBookings(); }, [fetchBookings]);
+
+  async function cancel(id) {
+    try {
+      // Real DELETE /api/bookings/:id with JWT
+      await apiFetch(`/bookings/${id}`, { method: "DELETE" });
+      showToast("Booking cancelled.", "info");
+      fetchBookings();
+    } catch (e) {
+      showToast(e.message, "error");
+    }
+  }
+
   const filtered = filter === "all" ? bookings : bookings.filter(b => b.status === filter);
 
   return (
@@ -777,46 +762,34 @@ function MyBookingsPage({ bookings, onCancel }) {
         {["all", "confirmed", "cancelled"].map(f => (
           <button key={f} className={`tab ${filter === f ? "active" : ""}`} onClick={() => setFilter(f)}>
             {f.charAt(0).toUpperCase() + f.slice(1)}
-            {f !== "all" && <span style={{ marginLeft: 6, fontSize: 11, opacity: 0.7 }}>({bookings.filter(b => b.status === f).length})</span>}
           </button>
         ))}
       </div>
 
-      {filtered.length === 0 ? (
+      {loading ? <div className="loading">Loading bookings...</div> : filtered.length === 0 ? (
         <div className="card" style={{ textAlign: "center", padding: 48, color: "var(--muted)" }}>
           <div style={{ fontSize: 40, marginBottom: 12 }}>📅</div>
-          <div style={{ fontWeight: 600, marginBottom: 6 }}>No bookings yet</div>
-          <div style={{ fontSize: 14 }}>Book a service to see it here.</div>
+          <div style={{ fontWeight: 600 }}>No bookings yet</div>
         </div>
       ) : (
         <div className="card" style={{ padding: 0, overflow: "hidden" }}>
           <table>
             <thead>
-              <tr>
-                <th>#</th>
-                <th>Service</th>
-                <th>Date</th>
-                <th>Time</th>
-                <th>Price</th>
-                <th>Status</th>
-                <th>Action</th>
-              </tr>
+              <tr><th>#</th><th>Service</th><th>Date</th><th>Time</th><th>Price</th><th>Status</th><th>Action</th></tr>
             </thead>
             <tbody>
               {filtered.map(b => (
                 <tr key={b.bookingId}>
-                  <td style={{ color: "var(--muted)", fontSize: 12 }}>#{String(b.bookingId).slice(-5)}</td>
-                  <td style={{ fontWeight: 600 }}>{b.service?.serviceName}</td>
-                  <td>{fmt(b.slot?.date || new Date())}</td>
-                  <td>{b.slot?.startTime} – {b.slot?.endTime}</td>
-                  <td>${b.service?.price.toFixed(2)}</td>
+                  <td style={{ color: "var(--muted)", fontSize: 12 }}>#{b.bookingId}</td>
+                  <td style={{ fontWeight: 600 }}>{b.serviceName}</td>
+                  <td>{b.date}</td>
+                  <td>{b.startTime} – {b.endTime}</td>
+                  <td>${b.price?.toFixed(2)}</td>
                   <td><span className={`badge badge-${b.status}`}>{b.status}</span></td>
                   <td>
                     {b.status === "confirmed" && (
                       <button className="btn btn-outline btn-sm" style={{ color: "var(--danger)", borderColor: "var(--danger)" }}
-                        onClick={() => onCancel(b.bookingId)}>
-                        Cancel
-                      </button>
+                        onClick={() => cancel(b.bookingId)}>Cancel</button>
                     )}
                   </td>
                 </tr>
@@ -829,27 +802,76 @@ function MyBookingsPage({ bookings, onCancel }) {
   );
 }
 
-// ══════════════════════════════════════════════════════════════════
-// ADMIN PAGE
-// ══════════════════════════════════════════════════════════════════
-function AdminPanel({ bookings, onCancel }) {
-  const [tab, setTab] = useState("bookings");
-  const [services, setServices] = useState(MOCK_SERVICES.map(s => ({ ...s })));
-  const [editSvc, setEditSvc] = useState(null);
+// ══════════════════════════════════════════════════════════════
+// ADMIN PAGE — Real fetch() to /api/admin/bookings, /api/admin/stats
+// ══════════════════════════════════════════════════════════════
+function AdminPage({ showToast }) {
+  const [tab, setTab]           = useState("bookings");
+  const [bookings, setBookings] = useState([]);
+  const [stats, setStats]       = useState(null);
+  const [services, setServices] = useState([]);
+  const [loading, setLoading]   = useState(true);
+  const [editSvc, setEditSvc]   = useState(null);
 
-  const confirmed = bookings.filter(b => b.status === "confirmed").length;
-  const cancelled = bookings.filter(b => b.status === "cancelled").length;
-  const revenue = bookings.filter(b => b.status === "confirmed").reduce((a, b) => a + (b.service?.price || 0), 0);
+  const fetchAll = useCallback(async () => {
+    setLoading(true);
+    try {
+      // Real fetch() calls with JWT Authorization header
+      const [b, s, svc] = await Promise.all([
+        apiFetch("/admin/bookings"),
+        apiFetch("/admin/stats"),
+        apiFetch("/services"),
+      ]);
+      setBookings(b);
+      setStats(s);
+      setServices(svc);
+    } catch (e) {
+      showToast(e.message, "error");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { fetchAll(); }, [fetchAll]);
+
+  async function cancelBooking(id) {
+    try {
+      await apiFetch(`/admin/bookings/${id}`, { method: "DELETE" });
+      showToast("Booking cancelled.", "info");
+      fetchAll();
+    } catch (e) {
+      showToast(e.message, "error");
+    }
+  }
+
+  async function saveService() {
+    try {
+      await apiFetch(`/services/${editSvc.serviceId}`, {
+        method: "PUT",
+        body: JSON.stringify(editSvc),
+      });
+      showToast("Service updated!");
+      setEditSvc(null);
+      fetchAll();
+    } catch (e) {
+      showToast(e.message, "error");
+    }
+  }
 
   return (
-    <div>
-      <div className="grid-3" style={{ marginBottom: 28 }}>
-        <div className="card stat-box"><div className="stat-num">{bookings.length}</div><div className="stat-lbl">Total Bookings</div></div>
-        <div className="card stat-box"><div className="stat-num">{confirmed}</div><div className="stat-lbl">Confirmed</div></div>
-        <div className="card stat-box"><div className="stat-num">{cancelled}</div><div className="stat-lbl">Cancelled</div></div>
-        <div className="card stat-box"><div className="stat-num">${revenue.toFixed(0)}</div><div className="stat-lbl">Revenue</div></div>
-        <div className="card stat-box"><div className="stat-num">{services.length}</div><div className="stat-lbl">Services</div></div>
-      </div>
+    <div className="page">
+      <div className="page-title">Admin Dashboard</div>
+      <div className="page-sub">Manage all bookings and services.</div>
+
+      {stats && (
+        <div className="grid-3" style={{ marginBottom: 28 }}>
+          <div className="card stat-box"><div className="stat-num">{stats.total}</div><div className="stat-lbl">Total Bookings</div></div>
+          <div className="card stat-box"><div className="stat-num">{stats.confirmed}</div><div className="stat-lbl">Confirmed</div></div>
+          <div className="card stat-box"><div className="stat-num">{stats.cancelled}</div><div className="stat-lbl">Cancelled</div></div>
+          <div className="card stat-box"><div className="stat-num">${stats.revenue?.toFixed(0)}</div><div className="stat-lbl">Revenue</div></div>
+          <div className="card stat-box"><div className="stat-num">{services.length}</div><div className="stat-lbl">Services</div></div>
+        </div>
+      )}
 
       <div className="tabs">
         {["bookings", "services"].map(t => (
@@ -859,39 +881,28 @@ function AdminPanel({ bookings, onCancel }) {
         ))}
       </div>
 
-      {tab === "bookings" && (
+      {loading ? <div className="loading">Loading...</div> : tab === "bookings" ? (
         bookings.length === 0 ? (
-          <div className="card" style={{ textAlign: "center", padding: 48, color: "var(--muted)" }}>
-            <div>No bookings to display.</div>
-          </div>
+          <div className="card" style={{ textAlign: "center", padding: 48, color: "var(--muted)" }}>No bookings yet.</div>
         ) : (
           <div className="card" style={{ padding: 0, overflow: "hidden" }}>
             <table>
               <thead>
-                <tr>
-                  <th>#ID</th>
-                  <th>User</th>
-                  <th>Service</th>
-                  <th>Date</th>
-                  <th>Time</th>
-                  <th>Price</th>
-                  <th>Status</th>
-                  <th>Action</th>
-                </tr>
+                <tr><th>#</th><th>User</th><th>Service</th><th>Date</th><th>Time</th><th>Price</th><th>Status</th><th>Action</th></tr>
               </thead>
               <tbody>
                 {bookings.map(b => (
                   <tr key={b.bookingId}>
-                    <td style={{ color: "var(--muted)", fontSize: 12 }}>#{String(b.bookingId).slice(-5)}</td>
-                    <td style={{ fontSize: 13 }}>{b.userId}</td>
-                    <td style={{ fontWeight: 600 }}>{b.service?.serviceName}</td>
-                    <td>{fmt(b.slot?.date || new Date())}</td>
-                    <td>{b.slot?.startTime}</td>
-                    <td>${b.service?.price.toFixed(2)}</td>
+                    <td style={{ color: "var(--muted)", fontSize: 12 }}>#{b.bookingId}</td>
+                    <td style={{ fontSize: 13 }}>{b.userName}</td>
+                    <td style={{ fontWeight: 600 }}>{b.serviceName}</td>
+                    <td>{b.date}</td>
+                    <td>{b.startTime}</td>
+                    <td>${b.price?.toFixed(2)}</td>
                     <td><span className={`badge badge-${b.status}`}>{b.status}</span></td>
                     <td>
                       {b.status === "confirmed" && (
-                        <button className="btn btn-danger btn-sm" onClick={() => onCancel(b.bookingId)}>Cancel</button>
+                        <button className="btn btn-danger btn-sm" onClick={() => cancelBooking(b.bookingId)}>Cancel</button>
                       )}
                     </td>
                   </tr>
@@ -900,71 +911,54 @@ function AdminPanel({ bookings, onCancel }) {
             </table>
           </div>
         )
-      )}
-
-      {tab === "services" && (
-        <div>
-          <div className="grid-2">
-            {services.map(s => (
-              <div className="card" key={s.serviceId}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                  <div>
-                    <div className="svc-name">{s.serviceName}</div>
-                    <div className="svc-desc" style={{ margin: "4px 0 12px" }}>{s.description}</div>
-                    <div className="svc-meta">
-                      <div className="svc-price">${s.price.toFixed(2)}</div>
-                      <div className="svc-dur">{s.duration} min</div>
-                    </div>
-                  </div>
-                  <button className="btn btn-outline btn-sm" onClick={() => setEditSvc({ ...s })}>Edit</button>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {editSvc && (
-            <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && setEditSvc(null)}>
-              <div className="modal">
-                <button className="modal-close" onClick={() => setEditSvc(null)}>✕</button>
-                <div className="modal-title">Edit Service</div>
-                <div className="modal-sub">Update the service details below.</div>
-                <div className="form-group">
-                  <label>Service Name</label>
-                  <input value={editSvc.serviceName} onChange={e => setEditSvc(s => ({ ...s, serviceName: e.target.value }))} />
-                </div>
-                <div className="form-group">
-                  <label>Description</label>
-                  <input value={editSvc.description} onChange={e => setEditSvc(s => ({ ...s, description: e.target.value }))} />
-                </div>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                  <div className="form-group">
-                    <label>Price ($)</label>
-                    <input type="number" value={editSvc.price} onChange={e => setEditSvc(s => ({ ...s, price: parseFloat(e.target.value) }))} />
-                  </div>
-                  <div className="form-group">
-                    <label>Duration (min)</label>
-                    <input type="number" value={editSvc.duration} onChange={e => setEditSvc(s => ({ ...s, duration: parseInt(e.target.value) }))} />
+      ) : (
+        <div className="grid-2">
+          {services.map(s => (
+            <div className="card" key={s.serviceId}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                <div>
+                  <div className="svc-name">{s.serviceName}</div>
+                  <div className="svc-desc" style={{ margin: "4px 0 12px" }}>{s.description}</div>
+                  <div className="svc-meta">
+                    <div className="svc-price">${s.price?.toFixed(2)}</div>
+                    <div className="svc-dur">{s.duration} min</div>
                   </div>
                 </div>
-                <button className="btn btn-primary" onClick={() => {
-                  setServices(prev => prev.map(s => s.serviceId === editSvc.serviceId ? editSvc : s));
-                  setEditSvc(null);
-                }}>Save Changes</button>
+                <button className="btn btn-outline btn-sm" onClick={() => setEditSvc({ ...s })}>Edit</button>
               </div>
             </div>
-          )}
+          ))}
         </div>
       )}
-    </div>
-  );
-}
 
-function AdminPage({ bookings, onCancel }) {
-  return (
-    <div className="page">
-      <div className="page-title">Admin Dashboard</div>
-      <div className="page-sub">Manage all bookings and services from one place.</div>
-      <AdminPanel bookings={bookings} onCancel={onCancel} />
+      {editSvc && (
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setEditSvc(null)}>
+          <div className="modal">
+            <button className="modal-close" onClick={() => setEditSvc(null)}>✕</button>
+            <div className="modal-title">Edit Service</div>
+            <div className="modal-sub">Update the service details below.</div>
+            <div className="form-group">
+              <label>Service Name</label>
+              <input value={editSvc.serviceName} onChange={e => setEditSvc(s => ({ ...s, serviceName: e.target.value }))} />
+            </div>
+            <div className="form-group">
+              <label>Description</label>
+              <input value={editSvc.description} onChange={e => setEditSvc(s => ({ ...s, description: e.target.value }))} />
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              <div className="form-group">
+                <label>Price ($)</label>
+                <input type="number" value={editSvc.price} onChange={e => setEditSvc(s => ({ ...s, price: parseFloat(e.target.value) }))} />
+              </div>
+              <div className="form-group">
+                <label>Duration (min)</label>
+                <input type="number" value={editSvc.duration} onChange={e => setEditSvc(s => ({ ...s, duration: parseInt(e.target.value) }))} />
+              </div>
+            </div>
+            <button className="btn btn-primary" onClick={saveService}>Save Changes</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
